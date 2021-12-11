@@ -1,5 +1,6 @@
 [package]
 name = "symspell"
+edition = "2018"
 version = "0.4.1"
 license = "MIT"
 authors = ["Rene Klacan <rene.klacan@gmail.com>"]
@@ -15,19 +16,9 @@ exclude = [
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-strsim = "^0.10"
-derive_builder = "^0.9"
+ahash = "0.7.6"
+hashbrown = "0.11.2"
+triple_accel = "0.4.0"
 serde = { version = "1.0", features = ["derive"], optional = true }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 unidecode = "^0.3"
 
-[target.wasm32-unknown-unknown.dependencies]
-serde = "^1.0.59"
-serde_derive = "^1.0.59"
-wasm-bindgen = { version = "^0.2", features = ["serde-serialize"]}
-
-[target.wasm32-unknown-unknown.dev-dependencies]
-wasm-bindgen-test = "^0.3"
-
-[dev-dependencies]

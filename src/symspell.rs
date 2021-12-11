@@ -1,17 +1,15 @@
 use std::cmp;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fs::File;
-use std::hash::{Hash, Hasher};
 use std::i64;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::ops::Deref;
 
-use composition::Composition;
-use edit_distance::{DistanceAlgorithm, EditDistance};
-use string_strategy::StringStrategy;
-use suggestion::Suggestion;
+use hashbrown::{HashMap, HashSet};
+
+use crate::composition::Composition;
+use crate::suggestion::Suggestion;
+use crate::string_strategy::StringStrategy;
+use crate::wordmap::{Word, WordMap};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Verbosity {
@@ -20,17 +18,12 @@ pub enum Verbosity {
     All,
 }
 
-#[derive(Builder, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SymSpell<T: StringStrategy> {
     /// Maximum edit distance for doing lookups.
-    #[builder(default = "2")]
     max_dictionary_edit_distance: i64,
     /// The length of word prefixes used for spell checking.
-    #[builder(default = "7")]
     prefix_length: i64,
     /// The minimum frequency count for dictionary words to be considered correct spellings.
-    #[builder(default = "1")]
     count_threshold: i64,
 
     //// number of all words in the corpus used to generate the
@@ -39,159 +32,30 @@ pub struct SymSpell<T: StringStrategy> {
     //// the sum of all counts c in the dictionary only if the
     //// dictionary is complete, but not if the dictionary is
     //// truncated or filtered
-    #[builder(default = "1_024_908_267_229", setter(skip))]
     corpus_word_count: i64,
 
-    #[builder(default = "0", setter(skip))]
     max_length: i64,
-    #[builder(default = "HashMap::new()", setter(skip))]
-    deletes: HashMap<u64, Vec<Box<str>>>,
-    #[builder(default = "HashMap::new()", setter(skip))]
-    words: HashMap<Box<str>, i64>,
-    #[builder(default = "HashMap::new()", setter(skip))]
-    bigrams: HashMap<Box<str>, i64>,
-    #[builder(default = "i64::MAX", setter(skip))]
-    bigram_min_count: i64,
-    #[builder(default = "DistanceAlgorithm::Damerau")]
-    distance_algorithm: DistanceAlgorithm,
-    #[builder(default = "T::new()", setter(skip))]
+    deletes: WordMap,
+    words: HashMap<String, i64>,
     string_strategy: T,
 }
 
 impl<T: StringStrategy> Default for SymSpell<T> {
-    fn default() -> SymSpell<T> {
-        SymSpellBuilder::default().build().unwrap()
+    fn default() -> Self {
+        Self {
+            max_dictionary_edit_distance: 2,
+            prefix_length: 7,
+            count_threshold: 1,
+            corpus_word_count: i64::MAX,
+            max_length: 0,
+            deletes: Default::default(),
+            words: Default::default(),
+            string_strategy: T::new()
+        }
     }
 }
 
 impl<T: StringStrategy> SymSpell<T> {
-    /// Load multiple dictionary entries from a file of word/frequency count pairs.
-    ///
-    /// # Arguments
-    ///
-    /// * `corpus` - The path+filename of the file.
-    /// * `term_index` - The column position of the word.
-    /// * `count_index` - The column position of the frequency count.
-    /// * `separator` - Separator between word and frequency
-    pub fn load_dictionary(
-        &mut self,
-        corpus: &str,
-        term_index: i64,
-        count_index: i64,
-        separator: &str,
-    ) -> bool {
-        if !Path::new(corpus).exists() {
-            return false;
-        }
-
-        let file = File::open(corpus).expect("file not found");
-        let sr = BufReader::new(file);
-
-        for (i, line) in sr.lines().enumerate() {
-            if i % 50_000 == 0 {
-                eprintln!("progress: {}", i);
-            }
-            let line_str = line.unwrap();
-            self.load_dictionary_line(&line_str, term_index, count_index, separator);
-        }
-        true
-    }
-
-    /// Load single dictionary entry from word/frequency count pair.
-    ///
-    /// # Arguments
-    ///
-    /// * `line` - word/frequency pair.
-    /// * `term_index` - The column position of the word.
-    /// * `count_index` - The column position of the frequency count.
-    /// * `separator` - Separator between word and frequency
-    pub fn load_dictionary_line(
-        &mut self,
-        line: &str,
-        term_index: i64,
-        count_index: i64,
-        separator: &str,
-    ) -> bool {
-        let line_parts: Vec<&str> = line.split(separator).collect();
-        if line_parts.len() >= 2 {
-            // let key = unidecode(line_parts[term_index as usize]);
-            let key = self
-                .string_strategy
-                .prepare(line_parts[term_index as usize]);
-            let count = line_parts[count_index as usize].parse::<i64>().unwrap();
-
-            self.create_dictionary_entry(key, count);
-        }
-        true
-    }
-
-    /// Load multiple bigram entries from a file of bigram/frequency count pairs.
-    ///
-    /// # Arguments
-    ///
-    /// * `corpus` - The path+filename of the file.
-    /// * `term_index` - The column position of the word.
-    /// * `count_index` - The column position of the frequency count.
-    /// * `separator` - Separator between word and frequency
-    pub fn load_bigram_dictionary(
-        &mut self,
-        corpus: &str,
-        term_index: i64,
-        count_index: i64,
-        separator: &str,
-    ) -> bool {
-        if !Path::new(corpus).exists() {
-            return false;
-        }
-        let file = File::open(corpus).expect("file not found");
-        let sr = BufReader::new(file);
-        for (i, line) in sr.lines().enumerate() {
-            if i % 50_000 == 0 {
-                eprintln!("progress: {}", i);
-            }
-            let line_str = line.unwrap();
-            self.load_bigram_dictionary_line(&line_str, term_index, count_index, &separator);
-        }
-        true
-    }
-
-    /// Load single dictionary entry from bigram/frequency count pair.
-    ///
-    /// # Arguments
-    ///
-    /// * `line` - bigram/frequency pair.
-    /// * `term_index` - The column position of the word.
-    /// * `count_index` - The column position of the frequency count.
-    /// * `separator` - Separator between word and frequency
-    pub fn load_bigram_dictionary_line(
-        &mut self,
-        line: &str,
-        term_index: i64,
-        count_index: i64,
-        separator: &str,
-    ) -> bool {
-        let line_parts: Vec<&str> = line.split(separator).collect();
-        let line_parts_len = if separator == " " { 3 } else { 2 };
-        if line_parts.len() >= line_parts_len {
-            let key = if separator == " " {
-                self.string_strategy.prepare(&format!(
-                    "{} {}",
-                    line_parts[term_index as usize],
-                    line_parts[(term_index + 1) as usize]
-                ))
-            } else {
-                self.string_strategy
-                    .prepare(line_parts[term_index as usize])
-            };
-            let count = line_parts[count_index as usize].parse::<i64>().unwrap();
-            self.bigrams.insert(key.into_boxed_str(), count);
-            if count < self.bigram_min_count {
-                self.bigram_min_count = count;
-            }
-        }
-        true
-    }
-
     /// Find suggested spellings for a given input word, using the maximum
     /// edit distance specified during construction of the SymSpell dictionary.
     ///
@@ -200,16 +64,6 @@ impl<T: StringStrategy> SymSpell<T> {
     /// * `input` - The word being spell checked.
     /// * `verbosity` - The value controlling the quantity/closeness of the retuned suggestions.
     /// * `max_edit_distance` - The maximum edit distance between input and suggested words.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use symspell::{SymSpell, AsciiStringStrategy, Verbosity};
-    ///
-    /// let mut symspell: SymSpell<AsciiStringStrategy> = SymSpell::default();
-    /// symspell.load_dictionary("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
-    /// symspell.lookup("whatver", Verbosity::Top, 2);
-    /// ```
     pub fn lookup(
         &self,
         input: &str,
@@ -231,7 +85,7 @@ impl<T: StringStrategy> SymSpell<T> {
         }
 
         let mut hashset1: HashSet<String> = HashSet::new();
-        let mut hashset2: HashSet<String> = HashSet::new();
+        let mut hashset2: HashSet<Word> = HashSet::new();
 
         if self.words.contains_key(input) {
             let suggestion_count = self.words[input];
@@ -242,7 +96,7 @@ impl<T: StringStrategy> SymSpell<T> {
             }
         }
 
-        hashset2.insert(input.to_string());
+        hashset2.insert(Word::from(input));
 
         let mut max_edit_distance2 = max_edit_distance;
         let mut candidate_pointer = 0;
@@ -260,8 +114,6 @@ impl<T: StringStrategy> SymSpell<T> {
             candidates.push(input.to_string());
         }
 
-        let distance_comparer = EditDistance::new(self.distance_algorithm.clone());
-
         while candidate_pointer < candidates.len() {
             let candidate = &candidates.get(candidate_pointer).unwrap().clone();
             candidate_pointer += 1;
@@ -275,19 +127,17 @@ impl<T: StringStrategy> SymSpell<T> {
                 break;
             }
 
-            if self.deletes.contains_key(&self.get_string_hash(&candidate)) {
-                let dict_suggestions = &self.deletes[&self.get_string_hash(&candidate)];
-
+            if let Some(dict_suggestions) = self.deletes.get(&candidate) {
                 for suggestion in dict_suggestions {
-                    let suggestion_len = self.string_strategy.len(suggestion) as i64;
+                    let suggestion_len = self.string_strategy.len(suggestion.as_str()) as i64;
 
-                    if suggestion.as_ref() == input {
+                    if suggestion == input {
                         continue;
                     }
 
                     if (suggestion_len - input_len).abs() > max_edit_distance2
                         || suggestion_len < candidate_len
-                        || (suggestion_len == candidate_len && suggestion.as_ref() != candidate)
+                        || (suggestion_len == candidate_len && suggestion.as_str() != candidate)
                     {
                         continue;
                     }
@@ -305,29 +155,29 @@ impl<T: StringStrategy> SymSpell<T> {
                     if candidate_len == 0 {
                         distance = cmp::max(input_len, suggestion_len);
 
-                        if distance > max_edit_distance2 || hashset2.contains(suggestion.as_ref()) {
+                        if distance > max_edit_distance2 || hashset2.contains(suggestion) {
                             continue;
                         }
-                        hashset2.insert(suggestion.to_string());
+                        hashset2.insert(suggestion.deref().clone());
                     } else if suggestion_len == 1 {
-                        distance = if !input.contains(&self.string_strategy.slice(suggestion, 0, 1))
+                        distance = if !input.contains(&self.string_strategy.slice(suggestion.as_str(), 0, 1))
                         {
                             input_len
                         } else {
                             input_len - 1
                         };
 
-                        if distance > max_edit_distance2 || hashset2.contains(suggestion.as_ref()) {
+                        if distance > max_edit_distance2 || hashset2.contains(suggestion) {
                             continue;
                         }
 
-                        hashset2.insert(suggestion.to_string());
+                        hashset2.insert(suggestion.deref().clone());
                     } else if self.has_different_suffix(
                         max_edit_distance,
                         input,
                         input_len,
                         candidate_len,
-                        suggestion,
+                        suggestion.as_str(),
                         suggestion_len,
                     ) {
                         continue;
@@ -336,28 +186,28 @@ impl<T: StringStrategy> SymSpell<T> {
                             && !self.delete_in_suggestion_prefix(
                                 candidate,
                                 candidate_len,
-                                suggestion,
+                                suggestion.as_str(),
                                 suggestion_len,
                             )
                         {
                             continue;
                         }
 
-                        if hashset2.contains(suggestion.as_ref()) {
+                        if hashset2.contains(suggestion) {
                             continue;
                         }
-                        hashset2.insert(suggestion.to_string());
+                        hashset2.insert(suggestion.deref().clone());
 
-                        distance = distance_comparer.compare(input, suggestion, max_edit_distance2);
-
-                        if distance < 0 {
-                            continue;
-                        }
+                        if let Some(d) = quick_compare(input, suggestion.as_str(), max_edit_distance2 as u8) {
+                            distance = d as i64;
+                        } else {
+                            continue
+                        };
                     }
 
                     if distance <= max_edit_distance2 {
-                        let suggestion_count = self.words[suggestion];
-                        let si = Suggestion::new(suggestion.as_ref(), distance, suggestion_count);
+                        let suggestion_count = self.words[suggestion.as_str()];
+                        let si = Suggestion::new(suggestion.to_string(), distance, suggestion_count);
 
                         if !suggestions.is_empty() {
                             match verbosity {
@@ -418,24 +268,13 @@ impl<T: StringStrategy> SymSpell<T> {
     ///
     /// * `input` - The sentence being spell checked.
     /// * `max_edit_distance` - The maximum edit distance between input and suggested words.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use symspell::{SymSpell, AsciiStringStrategy};
-    ///
-    /// let mut symspell: SymSpell<AsciiStringStrategy> = SymSpell::default();
-    /// symspell.load_dictionary("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
-    /// symspell.lookup_compound("whereis th elove", 2);
-    /// ```
-    pub fn lookup_compound(&self, input: &str, edit_distance_max: i64) -> Vec<Suggestion> {
+    pub fn lookup_compound(&self, input: &str, edit_distance_max: i64) -> String {
         //parse input string into single terms
         let term_list1 = self.parse_words(&self.string_strategy.prepare(input));
 
         // let mut suggestions_previous_term: Vec<Suggestion> = Vec::new();                  //suggestions for a single term
         let mut suggestions: Vec<Suggestion>;
         let mut suggestion_parts: Vec<Suggestion> = Vec::new();
-        let distance_comparer = EditDistance::new(self.distance_algorithm.clone());
 
         //translate every term to its best suggestion, otherwise it remains unchanged
         let mut last_combi = false;
@@ -518,15 +357,12 @@ impl<T: StringStrategy> SymSpell<T> {
                                 suggestion_split.term =
                                     format!("{} {}", suggestions1[0].term, suggestions2[0].term);
 
-                                let mut distance2 = distance_comparer.compare(
+                                let distance2 = quick_compare(
                                     &term_list1[i],
                                     &format!("{} {}", suggestions1[0].term, suggestions2[0].term),
-                                    edit_distance_max,
-                                );
-
-                                if distance2 < 0 {
-                                    distance2 = edit_distance_max + 1;
-                                }
+                                    edit_distance_max as u8,
+                                ).map(|v| v as i64)
+                                    .unwrap_or_else(|| (edit_distance_max + 1) as i64);
 
                                 if suggestion_split_best.term != "" {
                                     if distance2 > suggestion_split_best.distance {
@@ -536,64 +372,14 @@ impl<T: StringStrategy> SymSpell<T> {
                                         suggestion_split_best = Suggestion::empty();
                                     }
                                 }
-                                let count2: i64 = match self.bigrams.get(&*suggestion_split.term) {
-                                    Some(&bigram_frequency) => {
-                                        // increase count, if split
-                                        // corrections are part of or
-                                        // identical to input single term
-                                        // correction exists
-                                        if !suggestions.is_empty() {
-                                            let best_si = &suggestions[0];
-                                            // # alternatively remove the
-                                            // # single term from
-                                            // # suggestion_split, but then
-                                            // # other splittings could win
-                                            if suggestion_split.term == term_list1[i] {
-                                                // # make count bigger than
-                                                // # count of single term
-                                                // # correction
-                                                cmp::max(bigram_frequency, best_si.count + 2)
-                                            } else if suggestions1[0].term == best_si.term
-                                                || suggestions2[0].term == best_si.term
-                                            {
-                                                // # make count bigger than
-                                                // # count of single term
-                                                // # correction
-                                                cmp::max(bigram_frequency, best_si.count + 1)
-                                            } else {
-                                                bigram_frequency
-                                            }
-                                        // no single term correction exists
-                                        } else if suggestion_split.term == term_list1[i] {
-                                            cmp::max(
-                                                bigram_frequency,
-                                                cmp::max(
-                                                    suggestions1[0].count,
-                                                    suggestions2[0].count,
-                                                ) + 2,
-                                            )
-                                        } else {
-                                            bigram_frequency
-                                        }
-                                    }
-                                    None => {
-                                        // The Naive Bayes probability of
-                                        // the word combination is the
-                                        // product of the two word
-                                        // probabilities: P(AB)=P(A)*P(B)
-                                        // use it to estimate the frequency
-                                        // count of the combination, which
-                                        // then is used to rank/select the
-                                        // best splitting variant
-                                        cmp::min(
-                                            self.bigram_min_count,
-                                            ((suggestions1[0].count as f64)
-                                                / (self.corpus_word_count as f64)
-                                                * (suggestions2[0].count as f64))
-                                                as i64,
-                                        )
-                                    }
-                                };
+                                let count2: i64 = cmp::min(
+                                    i64::MAX,
+                                    ((suggestions1[0].count as f64)
+                                        / (self.corpus_word_count as f64)
+                                        * (suggestions2[0].count as f64))
+                                        as i64,
+                                );
+
                                 suggestion_split.distance = distance2;
                                 suggestion_split.count = count2;
 
@@ -638,22 +424,13 @@ impl<T: StringStrategy> SymSpell<T> {
             }
         }
 
-        let mut suggestion = Suggestion::empty();
-
-        let mut tmp_count: f64 = self.corpus_word_count as f64;
-
         let mut s = "".to_string();
         for si in suggestion_parts {
             s.push_str(&si.term);
             s.push_str(" ");
-            tmp_count *= si.count as f64 / self.corpus_word_count as f64;
         }
 
-        suggestion.term = s.trim().to_string();
-        suggestion.count = tmp_count as i64;
-        suggestion.distance = distance_comparer.compare(input, &suggestion.term, 2i64.pow(31) - 1);
-
-        vec![suggestion]
+        s.trim().to_string()
     }
 
     /// Divides a string into words by inserting missing spaces at the appropriate positions
@@ -663,16 +440,6 @@ impl<T: StringStrategy> SymSpell<T> {
     ///
     /// * `input` - The word being segmented.
     /// * `max_edit_distance` - The maximum edit distance between input and suggested words.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use symspell::{SymSpell, UnicodeStringStrategy, Verbosity};
-    ///
-    /// let mut symspell: SymSpell<UnicodeStringStrategy> = SymSpell::default();
-    /// symspell.load_dictionary("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
-    /// symspell.word_segmentation("itwas", 2);
-    /// ```
     pub fn word_segmentation(&self, input: &str, max_edit_distance: i64) -> Composition {
         let input = self.string_strategy.prepare(input);
         let asize = self.string_strategy.len(&input);
@@ -778,28 +545,42 @@ impl<T: StringStrategy> SymSpell<T> {
         true
     }
 
-    fn create_dictionary_entry<K>(&mut self, key: K, count: i64) -> bool
-    where
-        K: Clone + AsRef<str> + Into<String>,
-    {
-        if count < self.count_threshold {
-            return false;
+    pub fn using_with_dictionary(&mut self, map: HashMap<String, i64>) {
+        let mut deletes = HashMap::new();
+        let mut words = HashMap::new();
+        for (word, freq) in map {
+            self.create_dictionary_entry(word, freq, &mut deletes, &mut words);
         }
 
-        let key_clone = key.clone().into().into_boxed_str();
+        self.deletes.using_dictionary(deletes);
+        self.words = words;
+    }
 
-        match self.words.get(key.as_ref()) {
+    fn create_dictionary_entry(
+        &mut self,
+        key: String,
+        count: i64,
+        deletes: &mut HashMap<String, Vec<String>>,
+        words: &mut HashMap<String, i64>,
+    ) {
+        if count < self.count_threshold {
+            return;
+        }
+
+        let key_clone = key.clone();
+
+        match words.get(key.as_str()) {
             Some(i) => {
                 let updated_count = if i64::MAX - i > count {
                     i + count
                 } else {
                     i64::MAX
                 };
-                self.words.insert(key_clone, updated_count);
-                return false;
+                words.insert(key_clone, updated_count);
+                return;
             }
             None => {
-                self.words.insert(key_clone, count);
+                words.insert(key_clone, count);
             }
         }
 
@@ -812,15 +593,11 @@ impl<T: StringStrategy> SymSpell<T> {
         let edits = self.edits_prefix(key.as_ref());
 
         for delete in edits {
-            let delete_hash = self.get_string_hash(&delete);
-
-            self.deletes
-                .entry(delete_hash)
-                .and_modify(|e| e.push(key.clone().into().into_boxed_str()))
-                .or_insert_with(|| vec![key.clone().into().into_boxed_str()]);
+            deletes
+                .entry(delete)
+                .and_modify(|e| e.push(key.clone()))
+                .or_insert_with(|| vec![key.clone()]);
         }
-
-        true
     }
 
     fn edits_prefix(&self, key: &str) -> HashSet<String> {
@@ -908,12 +685,6 @@ impl<T: StringStrategy> SymSpell<T> {
                             .at(suggestion, (suggestion_len - min - 1) as isize))))
     }
 
-    fn get_string_hash(&self, s: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        hasher.finish()
-    }
-
     fn parse_words(&self, text: &str) -> Vec<String> {
         text.to_lowercase()
             .split_whitespace()
@@ -922,110 +693,83 @@ impl<T: StringStrategy> SymSpell<T> {
     }
 }
 
+#[inline]
+fn quick_compare(s1: &str, s2: &str, max_distance: u8) -> Option<u8> {
+    use triple_accel::levenshtein;
+
+    let s1 = s1.as_bytes();
+    let s2 = s2.as_bytes();
+
+    let max_len = cmp::max(s1.len(), s2.len());
+    let min_len = cmp::max(s1.len(), s2.len());
+
+    // optimisation, if we know the size delta is greater than our max edit distance there's
+    // no point doing the costly compute.
+    if (max_len - min_len) > max_distance as usize {
+        return None
+    }
+
+    levenshtein::levenshtein_simd_k_with_opts(
+        s1,
+        s2,
+        max_distance as u32,
+        false,
+        levenshtein::RDAMERAU_COSTS,
+    ).map(|(v, _)| v as u8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use string_strategy::UnicodeStringStrategy;
-
-    #[test]
-    fn test_lookup_compound_overflow() {
-        let edit_distance_max = 2;
-        let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
-        sym_spell.load_dictionary("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
-
-        let string_causing_overflow = "aaaaaaaaaaaaaaaaaaa";
-        // This causes a multiplication overflow in 0.4.0
-        let _results = sym_spell.lookup_compound(string_causing_overflow, edit_distance_max);
-    }
+    use crate::string_strategy::UnicodeStringStrategy;
 
     #[test]
     fn test_lookup_compound() {
         let edit_distance_max = 2;
         let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
-        sym_spell.load_dictionary("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
+        sym_spell.using_with_dictionary(get_frequencies());
 
         let typo = "whereis th elove";
         let correction = "whereas the love";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(64, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "the bigjest playrs";
         let correction = "the biggest players";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(34, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "Can yu readthis";
         let correction = "can you read this";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(3, results[0].distance);
-        assert_eq!(3, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
-        let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
+        let correction = "whereas the love he had dated for much of the past who couldn't read in sixth grade and inspired him";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
         let correction = "in the third quarter of last year he had learned of a secret plan";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
         let correction = "the biggest players in the strong summer film slate with plenty of fun";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
         let correction = "can you read this message despite the horrible spelling mistakes";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(10, results[0].distance);
-        assert_eq!(0, results[0].count);
-    }
-
-    #[test]
-    fn test_lookup_compound_with_bigrams() {
-        let edit_distance_max = 2;
-        let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
-        sym_spell.load_dictionary("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
-        sym_spell.load_bigram_dictionary(
-            "./data/frequency_bigramdictionary_en_243_342.txt",
-            0,
-            2,
-            " ",
-        );
-        let typo = "Can yu readthis";
-        let correction = "can you read this";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(3, results[0].distance);
-        assert_eq!(1366, results[0].count);
+        assert_eq!(correction, results);
     }
 
     #[test]
     fn test_word_segmentation() {
         let edit_distance_max = 2;
         let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
-        sym_spell.load_dictionary("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
+        sym_spell.using_with_dictionary(get_frequencies());
 
         let typo = "thequickbrownfoxjumpsoverthelazydog";
         let correction = "the quick brown fox jumps over the lazy dog";
@@ -1042,5 +786,24 @@ mod tests {
         let correction = "it was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness";
         let result = sym_spell.word_segmentation(typo, edit_distance_max);
         assert_eq!(correction, result.segmented_string);
+    }
+
+    fn get_frequencies() -> HashMap<String, i64> {
+        let mut sets = HashMap::new();
+        let file = File::open("data/frequency_dictionary_en_82_765.txt").unwrap();
+        let sr = BufReader::new(file);
+
+        for (_, line) in sr.lines().enumerate() {
+            let line_str = line.unwrap();
+            let line_parts: Vec<&str> = line_str.split(" ").collect();
+            if line_parts.len() >= 2 {
+                let term = line_parts[0];
+                let count = line_parts[1].parse::<i64>().unwrap();
+
+                sets.insert(term.to_string(), count as i64);
+            }
+        }
+
+        sets
     }
 }

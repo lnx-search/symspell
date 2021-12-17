@@ -194,10 +194,8 @@ impl<T: StringStrategy> SymSpell<T> {
                 deletes.entry(delete.clone())
                     .and_modify(|e: &mut Vec<String>| {
                         if !e.contains(&key) {
-                            return
+                            e.push(key.to_string());
                         }
-
-                        e.push(key.to_string());
                     })
                     .or_insert_with(|| vec![key.to_string()]);
             }
@@ -291,6 +289,8 @@ impl<T: StringStrategy> SymSpell<T> {
             }
 
             if let Some(dict_suggestions) = self.deletes.get(&candidate) {
+                dbg!(&candidate);
+
                 for ref_ in dict_suggestions {
                     let suggestion = self.deletes.word_at(ref_).to_string();
                     let suggestion_len = self.string_strategy.len(&suggestion) as i64;

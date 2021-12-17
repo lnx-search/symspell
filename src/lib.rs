@@ -26,8 +26,6 @@ extern crate derive_builder;
 #[cfg(not(target_arch = "wasm32"))]
 extern crate unidecode;
 
-extern crate crc32fast;
-
 #[cfg(target_arch = "wasm32")]
 extern crate wasm_bindgen;
 #[cfg(target_arch = "wasm32")]

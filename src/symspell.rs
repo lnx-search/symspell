@@ -945,63 +945,47 @@ mod tests {
         let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
         sym_spell.load_dictionary("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
 
-        let typo = "whereis th elove";
-        let correction = "whereas the love";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(64, results[0].count);
+        let start = std::time::Instant::now();
 
-        return;
+        for _ in 0..1_000 {
+            let typo = "whereis th elove";
+            let correction = "whereas the love";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "the bigjest playrs";
-        let correction = "the biggest players";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(34, results[0].count);
+            let typo = "the bigjest playrs";
+            let correction = "the biggest players";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "Can yu readthis";
-        let correction = "can you read this";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(3, results[0].distance);
-        assert_eq!(3, results[0].count);
+            let typo = "Can yu readthis";
+            let correction = "can you read this";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
-        let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+            let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
+            let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
-        let correction = "in the third quarter of last year he had learned of a secret plan";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+            let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
+            let correction = "in the third quarter of last year he had learned of a secret plan";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
-        let correction = "the biggest players in the strong summer film slate with plenty of fun";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+            let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
+            let correction = "the biggest players in the strong summer film slate with plenty of fun";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
 
-        let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
-        let correction = "can you read this message despite the horrible spelling mistakes";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(10, results[0].distance);
-        assert_eq!(0, results[0].count);
+            let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
+            let correction = "can you read this message despite the horrible spelling mistakes";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results[0].term);
+        }
+
+        println!("{:?}, {:?}/iter", start.elapsed(), start.elapsed() / 1_000);
+
     }
 
     #[test]

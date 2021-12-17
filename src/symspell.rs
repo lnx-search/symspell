@@ -19,7 +19,6 @@ pub enum Verbosity {
     All,
 }
 
-
 pub struct SymSpell<T: StringStrategy> {
     /// Maximum edit distance for doing lookups.
     // #[builder(default = "2")]
@@ -60,7 +59,7 @@ impl<T: StringStrategy> Default for SymSpell<T> {
             deletes: Default::default(),
             bigrams: Default::default(),
             bigram_min_count: i64::MAX,
-            string_strategy: T::new()
+            string_strategy: T::new(),
         }
     }
 }
@@ -175,12 +174,11 @@ impl<T: StringStrategy> SymSpell<T> {
         self.words = HashMap::new();
 
         for (term, count) in frequencies {
-            let key = self
-                .string_strategy
-                .prepare(&term);
+            let key = self.string_strategy.prepare(&term);
 
             for delete in self.create_dictionary_entry(key.clone(), count) {
-                deletes.entry(delete.clone())
+                deletes
+                    .entry(delete.clone())
                     .and_modify(|e: &mut Vec<String>| {
                         if !e.contains(&key) {
                             e.push(key.to_string());
@@ -308,12 +306,12 @@ impl<T: StringStrategy> SymSpell<T> {
                         }
                         hashset2.insert(suggestion.to_string());
                     } else if suggestion_len == 1 {
-                        distance = if !input.contains(&self.string_strategy.slice(&suggestion, 0, 1))
-                        {
-                            input_len
-                        } else {
-                            input_len - 1
-                        };
+                        distance =
+                            if !input.contains(&self.string_strategy.slice(&suggestion, 0, 1)) {
+                                input_len
+                            } else {
+                                input_len - 1
+                            };
 
                         if distance > max_edit_distance2 || hashset2.contains(suggestion.as_str()) {
                             continue;
@@ -346,11 +344,9 @@ impl<T: StringStrategy> SymSpell<T> {
                         }
                         hashset2.insert(suggestion.to_string());
 
-                        if let Some(d) = edit_distance::compare(
-                            input,
-                            &suggestion,
-                            max_edit_distance2,
-                        ) {
+                        if let Some(d) =
+                            edit_distance::compare(input, &suggestion, max_edit_distance2)
+                        {
                             distance = d;
                         } else {
                             continue;
@@ -526,7 +522,8 @@ impl<T: StringStrategy> SymSpell<T> {
                                     &term_list1[i],
                                     &format!("{} {}", suggestions1[0].term, suggestions2[0].term),
                                     edit_distance_max,
-                                ).unwrap_or_else(|| edit_distance_max + 1);
+                                )
+                                .unwrap_or_else(|| edit_distance_max + 1);
 
                                 if suggestion_split_best.term != "" {
                                     if distance2 > suggestion_split_best.distance {
@@ -771,7 +768,7 @@ impl<T: StringStrategy> SymSpell<T> {
 
     fn create_dictionary_entry(&mut self, key: String, count: i64) -> HashSet<String> {
         if count < self.count_threshold {
-            return  HashSet::new();
+            return HashSet::new();
         }
 
         match self.words.get(key.as_str()) {
@@ -947,7 +944,6 @@ mod tests {
         let correction = "can you read this message despite the horrible spelling mistakes";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
         assert_eq!(correction, results);
-
     }
 
     #[test]

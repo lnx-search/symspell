@@ -94,6 +94,9 @@ impl<T: StringStrategy> SymSpell<T> {
             let line_str = line.unwrap();
             self.load_dictionary_line(&line_str, term_index, count_index, separator);
         }
+
+        dbg!(self.words.len(), self.deletes.len());
+
         true
     }
 
@@ -277,6 +280,7 @@ impl<T: StringStrategy> SymSpell<T> {
 
             if self.deletes.contains_key(&self.get_string_hash(&candidate)) {
                 let dict_suggestions = &self.deletes[&self.get_string_hash(&candidate)];
+                dbg!(dict_suggestions.len());
 
                 for suggestion in dict_suggestions {
                     let suggestion_len = self.string_strategy.len(suggestion) as i64;
@@ -951,6 +955,8 @@ mod tests {
         assert_eq!(correction, results[0].term);
         assert_eq!(2, results[0].distance);
         assert_eq!(64, results[0].count);
+
+        return;
 
         let typo = "the bigjest playrs";
         let correction = "the biggest players";

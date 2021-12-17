@@ -5,7 +5,6 @@ use std::ops::Deref;
 
 use hashbrown::HashMap;
 
-
 /// A 32 bit sized pointer to a given word.
 #[derive(Copy, Clone)]
 pub(crate) struct WordRef(u32);
@@ -15,7 +14,6 @@ impl Debug for WordRef {
         write!(f, "WordRef(index={})", self.0)
     }
 }
-
 
 #[derive(Clone, Default)]
 pub(crate) struct Word(Box<[u8]>);
@@ -85,7 +83,6 @@ impl Hash for Word {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct WordMap {
     data: HashMap<u64, Box<[WordRef]>>,
@@ -112,25 +109,22 @@ impl WordMap {
                 }
             }
 
-            let slice = Vec::from_iter(ref_words.into_iter())
-                .into_boxed_slice();
+            let slice = Vec::from_iter(ref_words.into_iter()).into_boxed_slice();
 
             (slice, lookup_index)
         };
 
-        let mut dict = HashMap::from_iter(
-            dictionary.drain()
-                .map(|(k, v)| {
-                    let v: Vec<_> = v.into_iter()
-                        .map(|w| {
-                            let ptr = lookup.get(&w).unwrap();
-                            WordRef(*ptr)
-                        })
-                        .collect();
-
-                    (self.hash_string(&k), v.into_boxed_slice())
+        let mut dict = HashMap::from_iter(dictionary.drain().map(|(k, v)| {
+            let v: Vec<_> = v
+                .into_iter()
+                .map(|w| {
+                    let ptr = lookup.get(&w).unwrap();
+                    WordRef(*ptr)
                 })
-        );
+                .collect();
+
+            (self.hash_string(&k), v.into_boxed_slice())
+        }));
 
         dict.shrink_to_fit();
 

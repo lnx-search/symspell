@@ -913,40 +913,47 @@ mod tests {
         let mut sym_spell = SymSpell::<UnicodeStringStrategy>::default();
         sym_spell.using_dictionary_file("./data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
 
-        let typo = "whereis th elove";
-        let correction = "whereas the love";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+        let start = std::time::Instant::now();
 
-        let typo = "the bigjest playrs";
-        let correction = "the biggest players";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+        for _ in 0..1_000 {
+            let typo = "whereis th elove";
+            let correction = "whereas the love";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
 
-        let typo = "Can yu readthis";
-        let correction = "can you read this";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+            let typo = "the bigjest playrs";
+            let correction = "the biggest players";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
 
-        let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
-        let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+            let typo = "Can yu readthis";
+            let correction = "can you read this";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
 
-        let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
-        let correction = "in the third quarter of last year he had learned of a secret plan";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+            let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
+            let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
 
-        let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
-        let correction = "the biggest players in the strong summer film slate with plenty of fun";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+            let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
+            let correction = "in the third quarter of last year he had learned of a secret plan";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
 
-        let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
-        let correction = "can you read this message despite the horrible spelling mistakes";
-        let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(correction, results);
+            let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
+            let correction = "the biggest players in the strong summer film slate with plenty of fun";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
+
+            let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
+            let correction = "can you read this message despite the horrible spelling mistakes";
+            let results = sym_spell.lookup_compound(typo, edit_distance_max);
+            assert_eq!(correction, results);
+        }
+
+        println!("{:?}, {:?}/iter", start.elapsed(), start.elapsed() / 1_000);
+
     }
 
     #[test]

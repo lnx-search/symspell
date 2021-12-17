@@ -289,8 +289,6 @@ impl<T: StringStrategy> SymSpell<T> {
             }
 
             if let Some(dict_suggestions) = self.deletes.get(&candidate) {
-                dbg!(&candidate);
-
                 for ref_ in dict_suggestions {
                     let suggestion = self.deletes.word_at(ref_).to_string();
                     let suggestion_len = self.string_strategy.len(&suggestion) as i64;
@@ -942,6 +940,8 @@ mod tests {
         let typo = "whereis th elove";
         let correction = "whereas the love";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
+        dbg!(&results);
+
         assert_eq!(1, results.len());
         assert_eq!(correction, results[0].term);
         assert_eq!(2, results[0].distance);

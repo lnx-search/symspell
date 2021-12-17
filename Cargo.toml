@@ -18,5 +18,6 @@ hashbrown = "0.11.2"
 triple_accel = "0.4.0"
 strsim = "^0.10"
 unidecode = "^0.3"
+crc32fast = "1"
 
 [dev-dependencies]

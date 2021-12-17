@@ -281,8 +281,6 @@ impl<T: StringStrategy> SymSpell<T> {
             if self.deletes.contains_key(&self.get_string_hash(&candidate)) {
                 let dict_suggestions = &self.deletes[&self.get_string_hash(&candidate)];
 
-                dbg!(hash(&dict_suggestions));
-
                 for suggestion in dict_suggestions {
                     let suggestion_len = self.string_strategy.len(suggestion) as i64;
 
@@ -952,6 +950,8 @@ mod tests {
         let typo = "whereis th elove";
         let correction = "whereas the love";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
+        dbg!(&results);
+
         assert_eq!(1, results.len());
         assert_eq!(correction, results[0].term);
         assert_eq!(2, results[0].distance);
@@ -1050,13 +1050,4 @@ mod tests {
         let result = sym_spell.word_segmentation(typo, edit_distance_max);
         assert_eq!(correction, result.segmented_string);
     }
-}
-
-
-fn hash<V: Hash>(v: V) -> u64 {
-    use crc32fast::Hasher;
-
-    let mut hasher = Hasher::new();
-    v.hash(&mut hasher);
-    hasher.finish()
 }

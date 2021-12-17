@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
 use std::ops::Deref;
 
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 
 /// A 32 bit sized pointer to a given word.
@@ -21,11 +21,6 @@ impl Debug for WordRef {
 pub(crate) struct Word(Box<[u8]>);
 
 impl Word {
-    #[inline]
-    pub(crate) fn len(&self) -> usize {
-        self.0.len()
-    }
-
     #[inline]
     pub(crate) fn as_str(&self) -> &str {
         unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
@@ -110,7 +105,7 @@ impl WordMap {
             let mut ref_words = Vec::new();
             for words in dictionary.values() {
                 for word in words {
-                    if lookup_index.contains_key(word) {
+                    if !lookup_index.contains_key(word) {
                         ref_words.push(Word::from(word.clone()));
                         lookup_index.insert(word.clone(), (ref_words.len() - 1) as u32);
                     }
@@ -143,10 +138,12 @@ impl WordMap {
         self.word_references = ref_words;
     }
 
-    pub(crate) fn word_at(&self, word_ref: WordRef) -> &Word {
+    #[inline]
+    pub(crate) fn word_at(&self, word_ref: &WordRef) -> &Word {
         unsafe { self.word_references.get_unchecked(word_ref.0 as usize) }
     }
 
+    #[inline]
     pub(crate) fn get(&self, word: &str) -> Option<&[WordRef]> {
         self.data.get(&self.hash_string(word)).map(|v| v.as_ref())
     }

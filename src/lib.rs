@@ -19,10 +19,6 @@ let compound_suggestions = symspell.lookup_compound(sentence, 2);
 println!("{:?}", compound_suggestions);
 ```
 */
-#[macro_use]
-extern crate derive_builder;
-
-
 mod composition;
 mod edit_distance;
 mod string_strategy;
@@ -34,7 +30,4 @@ mod wordmap;
 pub use string_strategy::AsciiStringStrategy;
 pub use string_strategy::{StringStrategy, UnicodeStringStrategy, UnicodeiStringStrategy};
 pub use suggestion::Suggestion;
-pub use symspell::{SymSpell, SymSpellBuilder, Verbosity};
-
-#[cfg(target_arch = "wasm32")]
-pub use wasm::JSSymSpell;
+pub use symspell::{SymSpell, Verbosity};

@@ -7,7 +7,7 @@ fn main() {
     let mut symspell: SymSpell<UnicodeStringStrategy> = SymSpell::default();
 
     measure("load_dictionary", || {
-        symspell.load_dictionary("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
+        symspell.using_dictionary_file("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
     });
 
     measure("lookup", || {

@@ -109,6 +109,8 @@ impl<T: StringStrategy> SymSpell<T> {
 
         self.using_dictionary_frequencies(frequencies);
 
+        dbg!(self.words.len(), self.deletes.len());
+
         true
     }
 

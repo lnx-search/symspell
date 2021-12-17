@@ -99,6 +99,11 @@ impl Debug for WordMap {
 }
 
 impl WordMap {
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.data.len()
+    }
+
     pub(crate) fn using_dictionary(&mut self, mut dictionary: HashMap<String, Vec<String>>) {
         let (ref_words, lookup) = {
             let mut lookup_index: HashMap<String, u32> = HashMap::new();

@@ -7,7 +7,7 @@ use std::path::Path;
 use hashbrown::{HashMap, HashSet};
 
 use crate::composition::Composition;
-use crate::edit_distance::{DistanceAlgorithm, EditDistance};
+use crate::edit_distance;
 use crate::string_strategy::StringStrategy;
 use crate::suggestion::Suggestion;
 use crate::wordmap::WordMap;
@@ -44,8 +44,6 @@ pub struct SymSpell<T: StringStrategy> {
     bigrams: HashMap<Box<str>, i64>,
     // #[builder(default = "i64::MAX", setter(skip))]
     bigram_min_count: i64,
-    // #[builder(default = "DistanceAlgorithm::Damerau")]
-    distance_algorithm: DistanceAlgorithm,
     // #[builder(default = "T::new()", setter(skip))]
     string_strategy: T,
 }
@@ -62,7 +60,6 @@ impl<T: StringStrategy> Default for SymSpell<T> {
             deletes: Default::default(),
             bigrams: Default::default(),
             bigram_min_count: i64::MAX,
-            distance_algorithm: DistanceAlgorithm::Damerau,
             string_strategy: T::new()
         }
     }
@@ -264,8 +261,6 @@ impl<T: StringStrategy> SymSpell<T> {
             candidates.push(input.to_string());
         }
 
-        let distance_comparer = EditDistance::new(self.distance_algorithm.clone());
-
         while candidate_pointer < candidates.len() {
             let candidate = &candidates.get(candidate_pointer).unwrap().clone();
             candidate_pointer += 1;
@@ -351,11 +346,15 @@ impl<T: StringStrategy> SymSpell<T> {
                         }
                         hashset2.insert(suggestion.to_string());
 
-                        distance = distance_comparer.compare(input, &suggestion, max_edit_distance2);
-
-                        if distance < 0 {
+                        if let Some(d) = edit_distance::compare(
+                            input,
+                            &suggestion,
+                            max_edit_distance2,
+                        ) {
+                            distance = d;
+                        } else {
                             continue;
-                        }
+                        };
                     }
 
                     if distance <= max_edit_distance2 {
@@ -434,14 +433,13 @@ impl<T: StringStrategy> SymSpell<T> {
     /// symspell.load_dictionary("data/frequency_dictionary_en_82_765.txt", 0, 1, " ");
     /// symspell.lookup_compound("whereis th elove", 2);
     /// ```
-    pub fn lookup_compound(&self, input: &str, edit_distance_max: i64) -> Vec<Suggestion> {
+    pub fn lookup_compound(&self, input: &str, edit_distance_max: i64) -> String {
         //parse input string into single terms
         let term_list1 = self.parse_words(&self.string_strategy.prepare(input));
 
         // let mut suggestions_previous_term: Vec<Suggestion> = Vec::new();                  //suggestions for a single term
         let mut suggestions: Vec<Suggestion>;
         let mut suggestion_parts: Vec<Suggestion> = Vec::new();
-        let distance_comparer = EditDistance::new(self.distance_algorithm.clone());
 
         //translate every term to its best suggestion, otherwise it remains unchanged
         let mut last_combi = false;
@@ -524,15 +522,11 @@ impl<T: StringStrategy> SymSpell<T> {
                                 suggestion_split.term =
                                     format!("{} {}", suggestions1[0].term, suggestions2[0].term);
 
-                                let mut distance2 = distance_comparer.compare(
+                                let distance2 = edit_distance::compare(
                                     &term_list1[i],
                                     &format!("{} {}", suggestions1[0].term, suggestions2[0].term),
                                     edit_distance_max,
-                                );
-
-                                if distance2 < 0 {
-                                    distance2 = edit_distance_max + 1;
-                                }
+                                ).unwrap_or_else(|| edit_distance_max + 1);
 
                                 if suggestion_split_best.term != "" {
                                     if distance2 > suggestion_split_best.distance {
@@ -644,22 +638,13 @@ impl<T: StringStrategy> SymSpell<T> {
             }
         }
 
-        let mut suggestion = Suggestion::empty();
-
-        let mut tmp_count: f64 = self.corpus_word_count as f64;
-
         let mut s = "".to_string();
         for si in suggestion_parts {
             s.push_str(&si.term);
             s.push_str(" ");
-            tmp_count *= si.count as f64 / self.corpus_word_count as f64;
         }
 
-        suggestion.term = s.trim().to_string();
-        suggestion.count = tmp_count as i64;
-        suggestion.distance = distance_comparer.compare(input, &suggestion.term, 2i64.pow(31) - 1);
-
-        vec![suggestion]
+        s.trim().to_string()
     }
 
     /// Divides a string into words by inserting missing spaces at the appropriate positions
@@ -931,58 +916,37 @@ mod tests {
         let typo = "whereis th elove";
         let correction = "whereas the love";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(64, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "the bigjest playrs";
         let correction = "the biggest players";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(2, results[0].distance);
-        assert_eq!(34, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "Can yu readthis";
         let correction = "can you read this";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(3, results[0].distance);
-        assert_eq!(3, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
         let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "in te dhird qarter oflast jear he hadlearned ofca sekretplan";
         let correction = "in the third quarter of last year he had learned of a secret plan";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "the bigjest playrs in te strogsommer film slatew ith plety of funn";
         let correction = "the biggest players in the strong summer film slate with plenty of fun";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(9, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
 
         let typo = "Can yu readthis messa ge despite thehorible sppelingmsitakes";
         let correction = "can you read this message despite the horrible spelling mistakes";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(10, results[0].distance);
-        assert_eq!(0, results[0].count);
+        assert_eq!(correction, results);
     }
 
     #[test]
@@ -999,10 +963,7 @@ mod tests {
         let typo = "Can yu readthis";
         let correction = "can you read this";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        assert_eq!(1, results.len());
-        assert_eq!(correction, results[0].term);
-        assert_eq!(3, results[0].distance);
-        assert_eq!(1366, results[0].count);
+        assert_eq!(correction, results);
     }
 
     #[test]

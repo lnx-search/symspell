@@ -31,12 +31,6 @@ pub struct SymSpell<T: StringStrategy> {
     // #[builder(default = "1")]
     count_threshold: i64,
 
-    //// number of all words in the corpus used to generate the
-    //// frequency dictionary. This is used to calculate the word
-    //// occurrence probability p from word counts c : p=c/N. N equals
-    //// the sum of all counts c in the dictionary only if the
-    //// dictionary is complete, but not if the dictionary is
-    //// truncated or filtered
     // #[builder(default = "1_024_908_267_229", setter(skip))]
     corpus_word_count: i64,
 
@@ -62,7 +56,7 @@ impl<T: StringStrategy> Default for SymSpell<T> {
             max_dictionary_edit_distance: 2,
             prefix_length: 7,
             count_threshold: 1,
-            corpus_word_count: 0,
+            corpus_word_count: 1_024_908_267_229,
             max_length: 0,
             words: Default::default(),
             deletes: Default::default(),
@@ -108,8 +102,6 @@ impl<T: StringStrategy> SymSpell<T> {
         }
 
         self.using_dictionary_frequencies(frequencies);
-
-        dbg!(self.words.len(), self.deletes.len());
 
         true
     }
@@ -201,7 +193,6 @@ impl<T: StringStrategy> SymSpell<T> {
             }
         }
 
-        self.corpus_word_count = self.words.len() as i64;
         self.deletes.using_dictionary(deletes);
     }
 
@@ -940,8 +931,6 @@ mod tests {
         let typo = "whereis th elove";
         let correction = "whereas the love";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
-        dbg!(&results);
-
         assert_eq!(1, results.len());
         assert_eq!(correction, results[0].term);
         assert_eq!(2, results[0].distance);

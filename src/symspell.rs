@@ -354,7 +354,7 @@ impl<T: StringStrategy> SymSpell<T> {
                             distance = d;
                         } else {
                             continue;
-                        };
+                        }
                     }
 
                     if distance <= max_edit_distance2 {

@@ -1,5 +1,8 @@
 [![Documentation](https://docs.rs/symspell/badge.svg)](https://docs.rs/symspell)
 
+# WARNING! Do not use this for general projects, use the original repo.
+This repo contains alot of added unsafe and is unsound when using the UnicodeStrategy.
+
 # SymSpell
 
 Rust implementation of brilliant [SymSpell](https://github.com/wolfgarbe/SymSpell) originally written in C# by [@wolfgarbe](https://github.com/wolfgarbe).

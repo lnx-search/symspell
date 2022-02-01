@@ -1,5 +1,5 @@
 #[cfg(not(target_arch = "wasm32"))]
-use unidecode::unidecode;
+use deunicode::deunicode;
 
 pub trait StringStrategy: Clone + Default {
     fn new() -> Self;
@@ -30,7 +30,7 @@ impl StringStrategy for AsciiStringStrategy {
     }
 
     fn prepare(&self, s: &str) -> String {
-        unidecode(s)
+        deunicode(s)
     }
 
     fn len(&self, s: &str) -> usize {
@@ -60,8 +60,6 @@ impl StringStrategy for AsciiStringStrategy {
     }
 }
 
-// backward compatibility on typo
-pub type UnicodeiStringStrategy = UnicodeStringStrategy;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -122,6 +120,12 @@ mod tests {
     }
 
     #[test]
+    fn prepare2() {
+        let out = AsciiStringStrategy::new().prepare("Fußbodenheizung");
+        println!("{}", &out);
+    }
+
+    #[test]
     fn ascii_slice_prefix() {
         assert_eq!(AsciiStringStrategy::new().slice("daleko", 0, 3), "dal");
     }
@@ -153,6 +157,6 @@ mod tests {
 
     #[test]
     fn unicodei_strategy() {
-        assert_eq!(UnicodeiStringStrategy::new().prepare("ciccio"), "ciccio");
+        assert_eq!(UnicodeStringStrategy::new().prepare("ciccio"), "ciccio");
     }
 }

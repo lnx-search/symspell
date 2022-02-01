@@ -2,7 +2,9 @@ use std::cmp;
 use std::fs::File;
 use std::i64;
 use std::io::{BufRead, BufReader};
+use std::iter::Enumerate;
 use std::path::Path;
+use std::str::Chars;
 
 use hashbrown::{HashMap, HashSet};
 
@@ -881,11 +883,27 @@ impl<T: StringStrategy> SymSpell<T> {
     }
 
     fn parse_words(&self, text: &str) -> Vec<String> {
-        text.to_lowercase()
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect()
+        let text = text.to_lowercase();
+        let mut chars = text.chars().enumerate();
+
+        let mut tokens = vec![];
+        while let Some((offset_from, c)) = chars.next() {
+            if c.is_alphanumeric() {
+                let offset_to = search_token_end(&mut chars, text.len());
+                tokens.push(text[offset_from..offset_to].to_string())
+            }
+        }
+
+        tokens
     }
+}
+
+fn search_token_end(chars: &mut Enumerate<Chars>, default: usize) -> usize {
+    chars
+        .filter(|&(_, ref c)| !c.is_alphanumeric())
+        .map(|(offset, _)| offset)
+        .next()
+        .unwrap_or(default)
 }
 
 #[cfg(test)]
@@ -926,7 +944,7 @@ mod tests {
         assert_eq!(correction, results);
 
         let typo = "whereis th elove hehad dated forImuch of thepast who couqdn'tread in sixthgrade and ins pired him";
-        let correction = "whereas the love head dated for much of the past who couldn't read in sixth grade and inspired him";
+        let correction = "whereas the love head dated for much of the past who could tread in sixth grade and inspired him";
         let results = sym_spell.lookup_compound(typo, edit_distance_max);
         assert_eq!(correction, results);
 
